@@ -1,7 +1,82 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/stretchr/testify/assert"
+	"log"
+	"os/exec"
+	"testing"
+)
+
+const TestFileName = "test_match.dem"
+
+var event = &Event{
+	FileName: TestFileName,
+	SteamID:  "TEST_STEAM_ID",
+}
+
+func setupTestEnvironment() {
+	dropTestEnvironment()
+
+	cmd := exec.Command("docker", "run", "-d", "--name=localstack", "-p", "4566:4566", "localstack/localstack")
+	err := cmd.Run()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	cmd = exec.Command("aws", "s3", "mb", "s3://csense-demos", "--endpoint-url", "http://localhost:4566")
+	err = cmd.Run()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	cmd = exec.Command("aws", "s3", "cp", "assets/"+TestFileName, "s3://csense-demos", "--endpoint-url", "http://localhost:4566")
+	err = cmd.Run()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
 func TestParseDemo(t *testing.T) {
-	t.Skip("TODO: Implement this test")
+	setupTestEnvironment()
+
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion("us-east-1"),
+		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				return aws.Endpoint{
+					URL:           "http://localhost:4566",
+					SigningRegion: "us-east-1",
+				}, nil
+			},
+		)))
+
+	assert.NoError(t, err, "cfg expected to be loaded without error.")
+	assert.NotEmpty(t, cfg, "cfg expected to be loaded without error.")
+
+	client := s3.NewFromConfig(cfg)
+
+	assert.NotEmpty(t, client, "client expected to be loaded without error.")
+
+	demo, err := ParseDemo(context.Background(), event, client)
+
+	assert.Empty(t, err, "err expected to be empty.")
+	assert.NotEmpty(t, demo, "demo expected to be loaded without error.")
+	assert.Equal(t, demo.DemoFileName, TestFileName, "demo.DemoFileName expected to be equal to TestFileName.")
+
+	dropTestEnvironment()
+}
+
+func dropTestEnvironment() {
+	cmd := exec.Command("docker", "stop", "localstack")
+	cmd.Run()
+
+	cmd = exec.Command("docker", "rm", "localstack")
+	cmd.Run()
 }
