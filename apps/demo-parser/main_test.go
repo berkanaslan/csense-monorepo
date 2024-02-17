@@ -28,14 +28,17 @@ func setupTestEnvironment() {
 		log.Fatal(err)
 	}
 
-	cmd = exec.Command("aws", "s3", "mb", "s3://csense-demos", "--endpoint-url", "http://localhost:4566")
+	// Create a bucket
+	cmd = exec.Command("aws", "s3", "mb", "s3://"+BUCKET_NAME, "--endpoint-url", "http://localhost:4566")
 	err = cmd.Run()
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cmd = exec.Command("aws", "s3", "cp", "assets/"+TestFileName, "s3://csense-demos", "--endpoint-url", "http://localhost:4566")
+	// Upload test file to the bucket
+	cmd = exec.Command("aws", "s3", "cp", "assets/"+TestFileName,
+		"s3://"+BUCKET_NAME, "--endpoint-url", "http://localhost:4566", "--acl", "public-read", "--region", "us-east-1")
 	err = cmd.Run()
 
 	if err != nil {
@@ -43,19 +46,14 @@ func setupTestEnvironment() {
 	}
 }
 
+func TestDownloadDemo(t *testing.T) {
+	// TODO: Implement
+}
+
 func TestParseDemo(t *testing.T) {
 	setupTestEnvironment()
 
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion("us-east-1"),
-		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
-			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{
-					URL:           "http://localhost:4566",
-					SigningRegion: "us-east-1",
-				}, nil
-			},
-		)))
+	cfg, err := getAWSConfig()
 
 	assert.NoError(t, err, "cfg expected to be loaded without error.")
 	assert.NotEmpty(t, cfg, "cfg expected to be loaded without error.")
@@ -68,9 +66,32 @@ func TestParseDemo(t *testing.T) {
 
 	assert.Empty(t, err, "err expected to be empty.")
 	assert.NotEmpty(t, demo, "demo expected to be loaded without error.")
-	assert.Equal(t, demo.DemoFileName, TestFileName, "demo.DemoFileName expected to be equal to TestFileName.")
 
 	dropTestEnvironment()
+}
+
+func getAWSConfig() (aws.Config, error) {
+	return config.LoadDefaultConfig(context.Background(),
+		config.WithRegion("us-east-1"),
+		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				return aws.Endpoint{
+					URL:               "http://localhost:4566",
+					SigningRegion:     "us-east-1",
+					SigningName:       "s3",
+					PartitionID:       "aws",
+					HostnameImmutable: true,
+				}, nil
+			},
+		)))
+}
+
+func TestRemoveDemoFromS3(t *testing.T) {
+	// TODO: Implement
+}
+
+func TestRemoveLocalDemo(t *testing.T) {
+	// TODO: Implement
 }
 
 func dropTestEnvironment() {

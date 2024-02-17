@@ -20,13 +20,22 @@ func main() {
 		}
 
 		client := s3.NewFromConfig(cfg)
-		return ParseDemo(ctx, event, client)
+		match, err := ParseDemo(ctx, event, client)
+
+		if err != nil {
+			return nil, err
+		}
+
+		_ = RemoveLocalDemo(event)
+		_ = RemoveDemoFromS3(ctx, event, client)
+
+		return match, nil
 	})
 }
 
-// ParseDemo parses a demo file and returns a Match object's json representation
-func ParseDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*api.Match, error) {
-	bucketName := "csense-demos"
+// DownloadDemo downloads a demo file from S3 and returns a file object
+func DownloadDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*os.File, error) {
+	bucketName := BUCKET_NAME
 
 	objectOutput, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &bucketName,
@@ -53,7 +62,14 @@ func ParseDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*api.Mat
 		return nil, err
 	}
 
-	match, err := api.AnalyzeDemo(event.FileName, api.AnalyzeDemoOptions{
+	return localFile, nil
+}
+
+// ParseDemo parses a demo file and returns a Match object's json representation
+func ParseDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*api.Match, error) {
+	file, err := DownloadDemo(ctx, event, s3Client)
+
+	match, err := api.AnalyzeDemo(file.Name(), api.AnalyzeDemoOptions{
 		IncludePositions: false,
 		Source:           constants.DemoSourceValve,
 	})
@@ -63,4 +79,21 @@ func ParseDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*api.Mat
 	}
 
 	return match, nil
+}
+
+// RemoveDemoFromS3 deletes a demo file from S3
+func RemoveDemoFromS3(ctx context.Context, event *Event, s3Client *s3.Client) error {
+	bucketName := BUCKET_NAME
+
+	_, err := s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: &bucketName,
+		Key:    &event.FileName,
+	})
+
+	return err
+}
+
+// RemoveLocalDemo deletes a demo file from the local filesystem
+func RemoveLocalDemo(event *Event) error {
+	return os.Remove(event.FileName)
 }
