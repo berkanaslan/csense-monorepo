@@ -71,7 +71,7 @@ func ParseDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*api.Mat
 
 	match, err := api.AnalyzeDemo(file.Name(), api.AnalyzeDemoOptions{
 		IncludePositions: false,
-		Source:           constants.DemoSourceValve,
+		Source:           constants.DemoSourceFaceIt,
 	})
 
 	if err != nil {
