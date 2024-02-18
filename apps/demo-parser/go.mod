@@ -1,6 +1,6 @@
 module demo-parser
 
-go 1.22.0
+go 1.21.0
 
 require (
 	github.com/akiver/cs-demo-analyzer v1.3.1
