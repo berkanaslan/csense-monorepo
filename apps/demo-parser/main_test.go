@@ -6,7 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/assert"
-	"log"
+	"os"
 	"os/exec"
 	"testing"
 )
@@ -18,60 +18,50 @@ var event = &Event{
 	SteamID:  "TEST_STEAM_ID",
 }
 
-func setupTestEnvironment() {
-	dropTestEnvironment()
-
+func setupTestEnvironment(t *testing.T) {
 	cmd := exec.Command("docker", "run", "-d", "--name=localstack", "-p", "4566:4566", "localstack/localstack")
 	err := cmd.Run()
 
 	if err != nil {
-		log.Fatal(err)
+		t.Fatalf("Failed to start Localstack: %v", err)
 	}
 
 	// Create a bucket
-	cmd = exec.Command("aws", "s3", "mb", "s3://"+BUCKET_NAME, "--endpoint-url", "http://localhost:4566")
+	cmd = exec.Command("aws", "s3", "mb", "s3://"+BucketName, "--endpoint-url", "http://localhost:4566")
 	err = cmd.Run()
 
 	if err != nil {
-		log.Fatal(err)
+		t.Fatalf("Failed to create S3 bucket: %v", err)
 	}
 
 	// Upload test file to the bucket
 	cmd = exec.Command("aws", "s3", "cp", "assets/"+TestFileName,
-		"s3://"+BUCKET_NAME, "--endpoint-url", "http://localhost:4566", "--acl", "public-read", "--region", "us-east-1")
+		"s3://"+BucketName, "--endpoint-url", "http://localhost:4566", "--acl", "public-read", "--region", "us-east-1")
 	err = cmd.Run()
 
 	if err != nil {
-		log.Fatal(err)
+		t.Fatalf("Failed to upload test file to S3: %v", err)
 	}
 }
 
-func TestDownloadDemo(t *testing.T) {
-	// TODO: Implement
+func dropTestEnvironment(t *testing.T) {
+	cmd := exec.Command("docker", "stop", "localstack")
+	err := cmd.Run()
+
+	if err != nil {
+		t.Fatalf("Failed to stop Localstack: %v", err)
+	}
+
+	cmd = exec.Command("docker", "rm", "localstack")
+	err = cmd.Run()
+
+	if err != nil {
+		t.Fatalf("Failed to remove Localstack container: %v", err)
+	}
 }
 
-func TestParseDemo(t *testing.T) {
-	setupTestEnvironment()
-
-	cfg, err := getAWSConfig()
-
-	assert.NoError(t, err, "cfg expected to be loaded without error.")
-	assert.NotEmpty(t, cfg, "cfg expected to be loaded without error.")
-
-	client := s3.NewFromConfig(cfg)
-
-	assert.NotEmpty(t, client, "client expected to be loaded without error.")
-
-	demo, err := ParseDemo(context.Background(), event, client)
-
-	assert.Empty(t, err, "err expected to be empty.")
-	assert.NotEmpty(t, demo, "demo expected to be loaded without error.")
-
-	dropTestEnvironment()
-}
-
-func getAWSConfig() (aws.Config, error) {
-	return config.LoadDefaultConfig(context.Background(),
+func getS3Client(t *testing.T) *s3.Client {
+	cfg, err := config.LoadDefaultConfig(context.Background(),
 		config.WithRegion("us-east-1"),
 		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
 			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
@@ -84,20 +74,50 @@ func getAWSConfig() (aws.Config, error) {
 				}, nil
 			},
 		)))
+
+	assert.NoError(t, err, "cfg expected to be loaded without error.")
+	assert.NotEmpty(t, cfg, "cfg expected to be loaded without error.")
+
+	client := s3.NewFromConfig(cfg)
+
+	assert.NotEmpty(t, client, "client expected to be loaded without error.")
+
+	return client
+}
+
+func TestDownloadDemo(t *testing.T) {
+	setupTestEnvironment(t)
+
+	client := getS3Client(t)
+
+	file, err := DownloadDemo(context.Background(), event, client)
+
+	assert.Empty(t, err, "err expected to be empty.")
+	assert.NotEmpty(t, file, "file expected to be loaded without error.")
+	assert.Equal(t, TestFileName, file.Name(), "file name expected to be equal to the test file name.")
+}
+
+func TestParseDemo(t *testing.T) {
+	client := getS3Client(t)
+
+	demo, err := ParseDemo(context.Background(), event, client)
+
+	assert.Empty(t, err, "err expected to be empty.")
+	assert.NotEmpty(t, demo, "demo expected to be loaded without error.")
 }
 
 func TestRemoveDemoFromS3(t *testing.T) {
-	// TODO: Implement
+	defer dropTestEnvironment(t)
+
+	client := getS3Client(t)
+	err := RemoveDemoFromS3(context.Background(), event, client)
+	assert.Empty(t, err, "err expected to be empty.")
 }
 
-func TestRemoveLocalDemo(t *testing.T) {
-	// TODO: Implement
-}
+func TestRemoveDemoFileOnLocal(t *testing.T) {
+	err := RemoveDemoFileOnLocal(event)
+	assert.Empty(t, err, "err expected to be empty.")
 
-func dropTestEnvironment() {
-	cmd := exec.Command("docker", "stop", "localstack")
-	cmd.Run()
-
-	cmd = exec.Command("docker", "rm", "localstack")
-	cmd.Run()
+	_, err = os.Stat(event.FileName)
+	assert.True(t, os.IsNotExist(err), "file expected to be removed.")
 }

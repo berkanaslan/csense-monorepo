@@ -26,7 +26,7 @@ func main() {
 			return nil, err
 		}
 
-		_ = RemoveLocalDemo(event)
+		_ = RemoveDemoFileOnLocal(event)
 		_ = RemoveDemoFromS3(ctx, event, client)
 
 		return match, nil
@@ -35,7 +35,7 @@ func main() {
 
 // DownloadDemo downloads a demo file from S3 and returns a file object
 func DownloadDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*os.File, error) {
-	bucketName := BUCKET_NAME
+	bucketName := BucketName
 
 	objectOutput, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &bucketName,
@@ -83,7 +83,7 @@ func ParseDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*api.Mat
 
 // RemoveDemoFromS3 deletes a demo file from S3
 func RemoveDemoFromS3(ctx context.Context, event *Event, s3Client *s3.Client) error {
-	bucketName := BUCKET_NAME
+	bucketName := BucketName
 
 	_, err := s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: &bucketName,
@@ -93,7 +93,7 @@ func RemoveDemoFromS3(ctx context.Context, event *Event, s3Client *s3.Client) er
 	return err
 }
 
-// RemoveLocalDemo deletes a demo file from the local filesystem
-func RemoveLocalDemo(event *Event) error {
+// RemoveDemoFileOnLocal deletes a demo file from the local filesystem
+func RemoveDemoFileOnLocal(event *Event) error {
 	return os.Remove(event.FileName)
 }

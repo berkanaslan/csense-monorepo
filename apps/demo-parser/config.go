@@ -1,5 +1,5 @@
 package main
 
 const (
-	BUCKET_NAME = "csense-demos"
+	BucketName = "csense-demos"
 )
