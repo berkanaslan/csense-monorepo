@@ -27,7 +27,8 @@ func setupTestEnvironment(t *testing.T) {
 	}
 
 	// Create a bucket
-	cmd = exec.Command("aws", "s3", "mb", "s3://"+BucketName, "--endpoint-url", "http://localhost:4566")
+	cmd = exec.Command("aws", "s3", "mb", "s3://"+BucketName, "--endpoint-url", "http://localhost:4566",
+		"--profile", AWSProfile, "--region", AWSRegion)
 	err = cmd.Run()
 
 	if err != nil {
@@ -36,7 +37,8 @@ func setupTestEnvironment(t *testing.T) {
 
 	// Upload test file to the bucket
 	cmd = exec.Command("aws", "s3", "cp", "assets/"+TestFileName,
-		"s3://"+BucketName, "--endpoint-url", "http://localhost:4566", "--acl", "public-read", "--region", "us-east-1")
+		"s3://"+BucketName, "--endpoint-url", "http://localhost:4566", "--acl", "public-read",
+		"--profile", AWSProfile, "--region", AWSRegion)
 	err = cmd.Run()
 
 	if err != nil {
@@ -62,12 +64,13 @@ func dropTestEnvironment(t *testing.T) {
 
 func getS3Client(t *testing.T) *s3.Client {
 	cfg, err := config.LoadDefaultConfig(context.Background(),
-		config.WithRegion("us-east-1"),
+		config.WithSharedConfigProfile(AWSProfile),
+		config.WithRegion(AWSRegion),
 		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
 			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 				return aws.Endpoint{
 					URL:               "http://localhost:4566",
-					SigningRegion:     "us-east-1",
+					SigningRegion:     AWSRegion,
 					SigningName:       "s3",
 					PartitionID:       "aws",
 					HostnameImmutable: true,
