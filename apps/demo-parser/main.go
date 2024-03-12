@@ -8,7 +8,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"io"
+	"log"
 	"os"
+	"path/filepath"
+	"time"
+)
+
+const (
+	TempDirectory = "/tmp"
 )
 
 func main() {
@@ -36,6 +43,8 @@ func main() {
 // DownloadDemo downloads a demo file from S3 and returns a file object
 func DownloadDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*os.File, error) {
 	bucketName := BucketName
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*10)
+	defer cancel()
 
 	objectOutput, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &bucketName,
@@ -48,7 +57,7 @@ func DownloadDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*os.F
 
 	defer objectOutput.Body.Close()
 
-	localFile, err := os.Create(event.FileName)
+	localFile, err := os.Create(filepath.Join(TempDirectory, event.FileName))
 
 	if err != nil {
 		return nil, err
@@ -67,7 +76,13 @@ func DownloadDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*os.F
 
 // ParseDemo parses a demo file and returns a Match object's json representation
 func ParseDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*api.Match, error) {
+	log.Printf("Processing request data for user %s with %s file.", event.SteamID, event.FileName)
+
 	file, err := DownloadDemo(ctx, event, s3Client)
+
+	if err != nil {
+		log.Fatalf("Error downloading file: %s", err.Error())
+	}
 
 	match, err := api.AnalyzeDemo(file.Name(), api.AnalyzeDemoOptions{
 		IncludePositions: false,
@@ -75,7 +90,7 @@ func ParseDemo(ctx context.Context, event *Event, s3Client *s3.Client) (*api.Mat
 	})
 
 	if err != nil {
-		return nil, err
+		log.Fatalf("Error analyzing demo: %s", err.Error())
 	}
 
 	return match, nil
@@ -95,5 +110,5 @@ func RemoveDemoFromS3(ctx context.Context, event *Event, s3Client *s3.Client) er
 
 // RemoveDemoFileOnLocal deletes a demo file from the local filesystem
 func RemoveDemoFileOnLocal(event *Event) error {
-	return os.Remove(event.FileName)
+	return os.Remove(filepath.Join(TempDirectory, event.FileName))
 }
